@@ -63,6 +63,7 @@ while true; do
 --ccache=* ) ccache="${1#*=}"; shift ;;
 --svthevc=* ) svthevc="${1#*=}"; shift ;;
 --svtav1=* ) svtav1="${1#*=}"; shift ;;
+--svtvp9=* ) svtvp9="${1#*=}"; shift ;;
 --xvc=* ) xvc="${1#*=}"; shift ;;
     -- ) shift; break ;;
     -* ) echo "Error, unknown option: '$1'."; exit 1 ;;
@@ -242,7 +243,7 @@ if [[ "$mplayer" = "y" ]] || ! mpv_disabled libass ||
     [[ $ffmpeg = "sharedlibs" ]] && enabled_any {lib,}fontconfig &&
         do_removeOption "--enable-(lib|)fontconfig"
     if enabled_any {lib,}fontconfig &&
-        do_vcs "https://gitlab.freedesktop.org/fontconfig/fontconfig.git#tag=2.13.1"; then
+        do_vcs "https://gitlab.freedesktop.org/fontconfig/fontconfig.git#tag=LATEST"; then
         do_uninstall include/fontconfig "${_check[@]}"
         sed -i 's| test$||' Makefile.am
         sed -i 's|Libs.private:|& -lintl|' fontconfig.pc.in
@@ -332,9 +333,9 @@ if [[ $curl = y ]]; then
 fi
 _check=(libgnutls.{,l}a gnutls.pc)
 if enabled_any gnutls librtmp || [[ $rtmpdump = y ]] || [[ $curl = gnutls ]] &&
-    ! files_exist "${_check[@]}" &&
-    do_wget -h 4331fca55817ecdd74450b908a6c29b4f05bb24dd13144c6284aa34d872e1fcb \
-    "https://www.gnupg.org/ftp/gcrypt/gnutls/v3.6/gnutls-3.6.9.tar.xz"; then
+    do_pkgConfig "gnutls = 3.6.10" &&
+    do_wget -h b1f3ca67673b05b746a961acf2243eaae0ffe658b6a6494265c648e7c7812293 \
+    "https://www.gnupg.org/ftp/gcrypt/gnutls/v3.6/gnutls-3.6.10.tar.xz"; then
         do_pacman_install nettle
         do_uninstall include/gnutls "${_check[@]}"
         grep_or_sed crypt32 lib/gnutls.pc.in 's/Libs.private.*/& -lcrypt32/'
@@ -501,7 +502,7 @@ if [[ $ffmpeg != "no" || $standalone = y ]] && enabled libtesseract; then
         _check+=(bin-global/tesseract.exe)
         do_uninstall include/tesseract "${_check[@]}"
         sed -i -e 's|Libs.private.*|& -lstdc++|' \
-               -e 's|Requires.private.*|& libarchive iconv|' tesseract.pc.in
+               -e 's|Requires.private.*|& libarchive libcurl iconv|' tesseract.pc.in
         do_separate_confmakeinstall global --disable-{graphics,tessdata-prefix} \
             LIBLEPT_HEADERSDIR="$LOCALDESTDIR/include" \
             LIBS="$($PKG_CONFIG --libs iconv lept)" --datadir="$LOCALDESTDIR/bin-global"
@@ -589,12 +590,17 @@ if [[ $flac = y ]] && do_vcs "https://github.com/xiph/flac.git"; then
     else
         sed -i "/^SUBDIRS/,/[^\\]$/{/flac/d;}" src/Makefile.in
     fi
+    sed -i 's|__declspec(dllimport)||g' include/FLAC{,++}/export.h
     do_uninstall include/FLAC{,++} share/aclocal/libFLAC{,++}.m4 "${_check[@]}"
     do_separate_confmakeinstall audio --disable-{xmms-plugin,doxygen-docs}
     do_checkIfExist
 elif [[ $sox = y ]] || { [[ $standalone = y ]] && enabled_any libvorbis libopus; }; then
     do_pacman_install flac
+    grep_or_sed dllimport "$MINGW_PREFIX"/include/FLAC++/export.h \
+        's|__declspec(dllimport)||g' "$MINGW_PREFIX"/include/FLAC{,++}/export.h
 fi
+grep_or_sed dllimport "$LOCALDESTDIR"/include/FLAC++/export.h \
+        's|__declspec(dllimport)||g' "$LOCALDESTDIR"/include/FLAC{,++}/export.h
 
 _check=(libvo-amrwbenc.{l,}a vo-amrwbenc.pc)
 if [[ $ffmpeg != "no" ]] && enabled libvo-amrwbenc &&
@@ -678,7 +684,7 @@ if [[ $standalone = y ]] && enabled libopus; then
     _deps=(opus.pc "$MINGW_PREFIX"/lib/pkgconfig/{libssl,ogg}.pc)
     if do_vcs "https://github.com/xiph/opusfile.git"; then
         do_uninstall "${_check[@]}"
-        do_patch "https://0x0.st/sgwa.txt"
+        do_patch "https://gist.githubusercontent.com/1480c1/c3f32033ad4a07264e2063f0fb38fc1b/raw/0001-Disable-cert-store-integration-if-OPENSSL_VERSION_NU.patch" am
         do_autogen
         do_separate_confmakeinstall --disable-{examples,doc}
         do_checkIfExist
@@ -828,7 +834,7 @@ if [[ $ffmpeg != "no" ]] && enabled libopenmpt &&
     do_checkIfExist
 fi
 
-_check=(libmysofa.a mysofa.h)
+_check=(libmysofa.{a,pc} mysofa.h)
 if [[ $ffmpeg != "no" ]] && enabled libmysofa &&
     do_vcs "https://github.com/hoene/libmysofa.git"; then
     do_uninstall "${_check[@]}"
@@ -1215,7 +1221,7 @@ if [[ $ffmpeg != "no" ]] && enabled libvidstab && do_pkgConfig "vidstab = 1.10" 
     add_to_remove
 fi
 
-_check=(libzvbi.{h,{l,}a})
+_check=(libzvbi.{h,{l,}a} zvbi-0.2.pc)
 if [[ $ffmpeg != "no" ]] && enabled libzvbi &&
     do_pkgConfig "zvbi-0.2 = 0.2.35" &&
     do_wget_sf -h 95e53eb208c65ba6667fd4341455fa27 \
@@ -1316,6 +1322,17 @@ elif { [[ $svtav1 = y ]] || enabled libsvtav1; } &&
     do_checkIfExist
 fi
 
+_check=(bin-video/SvtVp9EncApp.exe
+    libSvtVp9Enc.a SvtVp9Enc.pc)
+if [[ $bits = "32bit" ]]; then
+    do_removeOption --enable-libsvtvp9
+elif { [[ $svtvp9 = y ]] || enabled libsvtvp9; } &&
+    do_vcs "https://github.com/OpenVisualCloud/SVT-VP9.git"; then
+    do_uninstall include/svt-vp9 "${_check[@]}" include/svt-vp9
+    do_cmakeinstall video -DUNIX=OFF
+    do_checkIfExist
+fi
+
 _check=(xvc.pc xvc{enc,dec}.h libxvc{enc,dec}.a bin-video/xvc{enc,dec}.exe)
 if [[ $xvc == y ]] &&
     do_vcs "https://github.com/divideon/xvc.git"; then
@@ -1373,7 +1390,7 @@ if [[ $x264 != no ]]; then
             if do_vcs "https://github.com/FFMS/ffms2.git"; then
                 do_uninstall "${_check[@]}"
                 sed -i 's/Libs.private.*/& -lstdc++/;s/Cflags.*/& -DFFMS_STATIC/' ffms2.pc.in
-                do_patch "https://0x0.st/sgEY.txt"
+                do_patch "https://raw.githubusercontent.com/m-ab-s/media-autobuild_suite/gh-pages/patches/0001-ffmsindex-fix-linking-issues.patch" am
                 mkdir -p src/config
                 do_autoreconf
                 do_separate_confmakeinstall video --prefix="$LOCALDESTDIR/opt/lightffmpeg"
@@ -1560,7 +1577,7 @@ elif [[ $ffmpeg != "no" ]] && enabled libvmaf &&
     do_checkIfExist
 fi
 
-_check=(ffnvcodec/nvEncodeAPI.h)
+_check=(ffnvcodec/nvEncodeAPI.h ffnvcodec.pc)
 if [[ $ffmpeg != "no" ]] && { enabled ffnvcodec ||
     ! disabled_any ffnvcodec autodetect || ! mpv_disabled cuda-hwaccel; } &&
     do_vcs "https://git.videolan.org/git/ffmpeg/nv-codec-headers.git" ffnvcodec; then
@@ -1987,7 +2004,7 @@ if [[ $mpv != "n" ]] && pc_exists libavcodec libavformat libswscale libavfilter;
         do_simple_print "${red}Update to at least Vapoursynth R24 to use with mpv${reset}"
     fi
 
-    _check=(mujs.h libmujs.a)
+    _check=(mujs.{h,pc} libmujs.a)
     if ! mpv_disabled javascript &&
         do_vcs "https://github.com/ccxvii/mujs.git"; then
         do_uninstall bin-global/mujs.exe "${_check[@]}"
@@ -2240,7 +2257,7 @@ if [[ $cyanrip = y ]]; then
 
     _deps=(libdiscid.a libmusicbrainz5.a)
     _check=(bin-audio/cyanrip.exe)
-    if do_vcs "https://github.com/atomnuker/cyanrip.git"; then
+    if do_vcs "https://github.com/cyanreg/cyanrip.git"; then
         old_PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
         _check=("$LOCALDESTDIR"/opt/cyanffmpeg/lib/pkgconfig/libav{codec,format}.pc)
         if flavor=cyan do_vcs "https://git.ffmpeg.org/ffmpeg.git"; then

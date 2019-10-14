@@ -293,8 +293,6 @@ do_vcs() {
     elif [[ -f recently_updated ]] && { [[ ! -f "build_successful$bits" ]] ||
         [[ -n $flavor && ! -f "build_successful${bits}_${flavor}" ]]; }; then
         do_print_status "┌ ${vcsFolder} ${vcsType}" "$orange" "Recently updated"
-    elif [[ -z ${vcsCheck[*]} ]] && ! files_exist "$vcsFolder.pc"; then
-        do_print_status "┌ ${vcsFolder} ${vcsType}" "$orange" "Missing pkg-config"
     elif [[ -n ${vcsCheck[*]} ]] && ! files_exist "${vcsCheck[@]}"; then
         do_print_status "┌ ${vcsFolder} ${vcsType}" "$orange" "Files missing"
     elif [[ -n ${deps[*]} ]] && test_newer installed "${deps[@]}" "${vcsCheck[0]}"; then
@@ -777,6 +775,7 @@ do_getFFmpegConfig() {
         fi
     fi
 
+    FFMPEG_OPTS=()
     for opt in "${FFMPEG_BASE_OPTS[@]}" "${FFMPEG_DEFAULT_OPTS[@]}"; do
         [[ -n $opt ]] && FFMPEG_OPTS+=("$opt")
     done
@@ -1449,11 +1448,15 @@ do_separate_confmakeinstall() {
 }
 
 do_configure() {
+    # use this array to pass additional parameters to configure
+    local conf_extras=()
     extra_script pre configure
     [[ -f "$(get_first_subdir)/do_not_reconfigure" ]] &&
         return
-    log "configure" ${config_path:-.}/configure --prefix="$LOCALDESTDIR" "$@"
+    log "configure" ${config_path:-.}/configure --prefix="$LOCALDESTDIR" "$@" \
+        "${conf_extras[@]}"
     extra_script post configure
+    unset conf_extras
 }
 
 do_make() {

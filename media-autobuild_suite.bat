@@ -115,7 +115,7 @@ set mpv_options_full=dvdnav cdda #egl-angle #html-build ^
 set iniOptions=msys2Arch arch license2 vpx2 x2643 x2652 other265 flac fdkaac mediainfo ^
 soxB ffmpegB2 ffmpegUpdate ffmpegChoice mp4box rtmpdump mplayer2 mpv cores deleteSource ^
 strip pack logging bmx standalone updateSuite aom faac ffmbc curl cyanrip2 redshift rav1e ^
-ripgrep dav1d vvc jq dssim avs2 timeStamp noMintty ccache svthevc svtav1 xvc
+ripgrep dav1d vvc jq dssim avs2 timeStamp noMintty ccache svthevc svtav1 svtvp9 xvc
 
 set previousOptions=0
 set msys2ArchINI=0
@@ -252,7 +252,7 @@ if %vpx2INI%==0 (
     echo -------------------------------------------------------------------------------
     echo -------------------------------------------------------------------------------
     echo.
-    echo. Build vpx [VP8/VP9/VP10 encoder]?
+    echo. Build vpx [VP8/VP9 encoder]?
     echo. 1 = Yes
     echo. 2 = No
     echo.
@@ -505,6 +505,29 @@ if %buildsvtav1%==1 set "svtav1=y"
 if %buildsvtav1%==2 set "svtav1=n"
 if %buildsvtav1% GTR 2 GOTO svtav1
 if %deleteINI%==1 echo.svtav1=^%buildsvtav1%>>%ini%
+
+:svtvp9
+if %svtvp9INI%==0 (
+    echo -------------------------------------------------------------------------------
+    echo -------------------------------------------------------------------------------
+    echo.
+    echo. Build SVT-VP9? [VP9 encoder]
+    echo. 1 = Yes
+    echo. 2 = No
+    echo.
+    echo. Look at the link for hardware requirements
+    echo. https://github.com/OpenVisualCloud/SVT-VP9#Hardware
+    echo.
+    echo -------------------------------------------------------------------------------
+    echo -------------------------------------------------------------------------------
+    set /P buildsvtvp9="Build SVT-VP9: "
+) else set buildsvtvp9=%svtvp9INI%
+
+if "%buildsvtvp9%"=="" GOTO svtvp9
+if %buildsvtvp9%==1 set "svtvp9=y"
+if %buildsvtvp9%==2 set "svtvp9=n"
+if %buildsvtvp9% GTR 2 GOTO svtvp9
+if %deleteINI%==1 echo.svtvp9=^%buildsvtvp9%>>%ini%
 
 :flac
 if %flacINI%==0 (
@@ -1293,6 +1316,8 @@ if not exist "%instdir%\%msys2%\msys2_shell.cmd" (
         echo -------------------------------------------------------------------------------
         7z >nul 2>&1 && (
             7z x msys2-base.tar.xz -so | 7z x -aoa -si -ttar -o..
+        ) || 7za >nul 2>&1 && (
+            7za x msys2-base.tar.xz -so | 7za x -aoa -si -ttar -o..
         ) || echo $wc = New-Object System.Net.WebClient; ^
             $wc.DownloadFile^(^(Invoke-RestMethod "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq 'pscx' and IsLatestVersion"^).content.src, "$PWD\pscx.zip"^); ^
             Add-Type -assembly "System.IO.Compression.FileSystem"; ^
@@ -1599,7 +1624,7 @@ set compileArgs=--cpuCount=%cpuCount% --build32=%build32% --build64=%build64% ^
 --logging=%logging% --bmx=%bmx% --standalone=%standalone% --aom=%aom% --faac=%faac% --ffmbc=%ffmbc% ^
 --curl=%curl% --cyanrip=%cyanrip% --redshift=%redshift% --rav1e=%rav1e% --ripgrep=%ripgrep% ^
 --dav1d=%dav1d% --vvc=%vvc% --jq=%jq% --dssim=%dssim% --avs2=%avs2% --timeStamp=%timeStamp% ^
---noMintty=%noMintty% --ccache=%ccache% --svthevc=%svthevc% --svtav1=%svtav1% --xvc=%xvc%
+--noMintty=%noMintty% --ccache=%ccache% --svthevc=%svthevc% --svtav1=%svtav1% --svtvp9=%svtvp9% --xvc=%xvc%
     set "msys2=%msys2%"
     set "noMintty=%noMintty%"
     if %build64%==yes ( set "MSYSTEM=MINGW64" ) else set "MSYSTEM=MINGW32"
@@ -1615,7 +1640,7 @@ if %noMintty%==y (
     if exist %CD%\build\compile.log del %CD%\build\compile.log
     start /I %CD%\%msys2%\usr\bin\mintty.exe -i /msys2.ico -t "media-autobuild_suite" ^
     --log 2>&1 %CD%\build\compile.log /bin/env MSYSTEM=%MSYSTEM% MSYS2_PATH_TYPE=inherit ^
-    MSYS=%symlinkSupported% /usr/bin/bash ^
+    MSYS=%MSYS% /usr/bin/bash ^
     --login /build/media-suite_compile.sh %compileArgs%
     exit /B %ERRORLEVEL%
 )
@@ -1670,7 +1695,7 @@ goto :EOF
     echo.ACLOCAL_PATH="${LOCALDESTDIR}/share/aclocal:${MINGW_PREFIX}/share/aclocal:/usr/share/aclocal"
     echo.PKG_CONFIG="${MINGW_PREFIX}/bin/pkg-config --static"
     echo.PKG_CONFIG_PATH="${LOCALDESTDIR}/lib/pkgconfig:${MINGW_PREFIX}/lib/pkgconfig"
-    echo.CPPFLAGS="-D_FORTIFY_SOURCE=2 -D__USE_MINGW_ANSI_STDIO=1"
+    echo.CPPFLAGS="-D_FORTIFY_SOURCE=0 -D__USE_MINGW_ANSI_STDIO=1"
     echo.CFLAGS="-mthreads -mtune=generic -O2 -pipe"
     echo.CXXFLAGS="${CFLAGS}"
     echo.LDFLAGS="-pipe -static-libgcc -static-libstdc++"
