@@ -56,6 +56,7 @@ while true; do
 --dav1d=* ) dav1d="${1#*=}"; shift ;;
 --vvc=* ) vvc="${1#*=}"; shift ;;
 --jq=* ) jq="${1#*=}"; shift ;;
+--jo=* ) jo="${1#*=}"; shift ;;
 --dssim=* ) dssim="${1#*=}"; shift ;;
 --avs2=* ) avs2="${1#*=}"; shift ;;
 --timeStamp=* ) timeStamp="${1#*=}"; shift ;;
@@ -125,6 +126,7 @@ _clean_old_builds=(j{config,error,morecfg,peglib}.h
     bin-global/libgcrypt-config libgcrypt.a gcrypt.h
     lib/libgcrypt.def bin-global/{dumpsexp,hmac256,mpicalc}.exe
     crossc.{h,pc} libcrossc.a
+    include/onig{uruma,gnu,posix}.h libonig.a oniguruma.pc
 )
 
 do_uninstall q all "${_clean_old_builds[@]}"
@@ -191,23 +193,23 @@ if [[ $ripgrep = y ]] &&
     do_checkIfExist
 fi
 
-_check=(libonig.a oniguruma.pc)
-if [[ "$jq" = y ]] &&
-    do_vcs "https://github.com/kkos/oniguruma.git"; then
-    do_pacman_remove oniguruma
-    do_uninstall include/onig{uruma,gnu,posix}.h "${_check[@]}"
-    do_cmakeinstall
+_check=(bin-global/jo.exe)
+if [[ "$jo" = y ]] && do_vcs "https://github.com/jpmens/jo.git"; then
+    do_autoreconf
+    do_separate_confmakeinstall global
     do_checkIfExist
 fi
 
-_deps=(oniguruma.pc)
+_deps=("$MINGW_PREFIX"/lib/pkgconfig/oniguruma.pc)
 _check=(bin-global/jq.exe)
 if [[ "$jq" = y ]] &&
     do_vcs "https://github.com/stedolan/jq.git"; then
+    do_pacman_install oniguruma
     do_uninstall "${_check[@]}"
     do_autoreconf
     CFLAGS+=' -D_POSIX_C_SOURCE' YFLAGS='--warnings=no-yacc' \
-        do_separate_confmakeinstall global --enable-all-static --enable-pthread-tls --disable-docs
+        do_separate_conf global --enable-all-static --enable-pthread-tls --disable-docs
+    do_make && do_install jq.exe bin-global/
     do_checkIfExist
 fi
 
@@ -471,7 +473,7 @@ _check=(libwebp{,mux}.{{,l}a,pc})
 if [[ $ffmpeg != "no" || $standalone = y ]] && enabled libwebp &&
     do_vcs "https://chromium.googlesource.com/webm/libwebp"; then
     if [[ $standalone = y ]]; then
-        extracommands=(--enable-{experimental,libwebp{demux,decoder,extras}}
+        extracommands=(--enable-libwebp{demux,decoder,extras}
             "LIBS=$($PKG_CONFIG --libs libpng libtiff-4)")
     else
         extracommands=()
@@ -989,9 +991,8 @@ if { [[ $aom = y ]] || { [[ $ffmpeg != "no" ]] && enabled libaom; }; } &&
     fi
     do_uninstall include/aom "${_check[@]}"
     get_external_opts extracommands
-    do_cmakeinstall video -DENABLE_{DOCS,TOOLS,TESTS}=off -DENABLE_NASM=on \
-        -DENABLE_TEST{S,DATA}=OFF -DCONFIG_LOWBITDEPTH=1 \
-        "${extracommands[@]}"
+    do_cmakeinstall video -DENABLE_{DOCS,TOOLS}=off -DENABLE_TEST{S,DATA}=OFF \
+        -DENABLE_NASM=on -DFORCE_HIGHBITDEPTH_DECODING=0 "${extracommands[@]}"
     do_checkIfExist
     unset extracommands
 fi
@@ -1420,7 +1421,7 @@ if [[ $x264 != no ]]; then
             if do_vcs "https://github.com/FFMS/ffms2.git"; then
                 do_uninstall "${_check[@]}"
                 sed -i 's/Libs.private.*/& -lstdc++/;s/Cflags.*/& -DFFMS_STATIC/' ffms2.pc.in
-                do_patch "https://raw.githubusercontent.com/m-ab-s/media-autobuild_suite/gh-pages/patches/0001-ffmsindex-fix-linking-issues.patch" am
+                do_patch "https://gist.githubusercontent.com/1480c1/8881966fa8151bc5e17d5a898b2d447f/raw/0001-ffmsindex-fix-linking-issues.patch" am
                 mkdir -p src/config
                 do_autoreconf
                 do_separate_confmakeinstall video --prefix="$LOCALDESTDIR/opt/lightffmpeg"
@@ -2014,7 +2015,7 @@ if [[ $mpv != "n" ]] && pc_exists libavcodec libavformat libswscale libavfilter;
     do_pacman_remove angleproject-git
     _check=(EGL/egl.h)
     if mpv_enabled egl-angle && do_vcs "https://chromium.googlesource.com/angle/angle"; then
-        do_simple_print "${orange}mpv will need libGLESv2.dll and libEGL.dll to execute"'!'
+        do_simple_print "${orange}mpv will need libGLESv2.dll and libEGL.dll to use gpu-context=angle"'!'
         do_simple_print "You can find these in your browser's installation directory, usually."
         do_uninstall include/{EGL,GLES{2,3},GLSLANG,KHR,platform} angle_gl.h \
             lib{GLESv2,EGL}.a "${_check[@]}"

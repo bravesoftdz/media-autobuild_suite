@@ -74,7 +74,7 @@ set msyspackages=asciidoc autoconf automake-wrapper autogen bison diffstat dos2u
 intltool libtool patch python xmlto make zip unzip git subversion wget p7zip mercurial man-db ^
 gperf winpty texinfo gyp-git doxygen autoconf-archive itstool ruby mintty flex
 
-set mingwpackages=cmake dlfcn libpng gcc nasm pcre tools-git yasm ninja pkg-config meson ccache
+set mingwpackages=cmake dlfcn libpng gcc nasm pcre tools-git yasm ninja pkg-config meson ccache jq
 
 :: built-ins
 set ffmpeg_options_builtin=--disable-autodetect amf bzlib cuda cuvid d3d11va dxva2 ^
@@ -103,19 +103,19 @@ set ffmpeg_options_full_shared=opencl opengl cuda-nvcc libnpp libopenh264
 :: built-ins
 set mpv_options_builtin=#cplayer #manpage-build #lua #javascript #libass ^
 #libbluray #uchardet #rubberband #lcms2 #libarchive #libavdevice ^
-#shaderc #spirv-cross #d3d11 #jpeg #vapoursynth #vulkan #libplacebo #d3d11
+#shaderc #spirv-cross #d3d11 #jpeg #vapoursynth #vulkan #libplacebo
 
 :: overriden defaults
 set mpv_options_basic=--disable-debug-build "--lua=luajit"
 
 :: all supported options
 set mpv_options_full=dvdnav cdda #egl-angle #html-build ^
-#pdf-build libmpv-shared openal
+#pdf-build libmpv-shared openal sdl2 #sdl2-gamepad #sdl2-audio #sdl2-video
 
 set iniOptions=msys2Arch arch license2 vpx2 x2643 x2652 other265 flac fdkaac mediainfo ^
 soxB ffmpegB2 ffmpegUpdate ffmpegChoice mp4box rtmpdump mplayer2 mpv cores deleteSource ^
 strip pack logging bmx standalone updateSuite aom faac ffmbc curl cyanrip2 redshift rav1e ^
-ripgrep dav1d vvc jq dssim avs2 timeStamp noMintty ccache svthevc svtav1 svtvp9 xvc
+ripgrep dav1d vvc jq dssim avs2 timeStamp noMintty ccache svthevc svtav1 svtvp9 xvc jo
 
 set previousOptions=0
 set msys2ArchINI=0
@@ -1022,6 +1022,26 @@ if %buildjq%==2 set "jq=n"
 if %buildjq% GTR 2 GOTO jq
 if %deleteINI%==1 echo.jq=^%buildjq%>>%ini%
 
+:jo
+if %joINI%==0 (
+    echo -------------------------------------------------------------------------------
+    echo -------------------------------------------------------------------------------
+    echo.
+    echo. Build jo ^(CLI JSON from shell^)?
+    echo. 1 = Yes
+    echo. 2 = No
+    echo.
+    echo -------------------------------------------------------------------------------
+    echo -------------------------------------------------------------------------------
+    set /P buildjo="Build jo: "
+) else set buildjo=%joINI%
+
+if "%buildjo%"=="" GOTO jo
+if %buildjo%==1 set "jo=y"
+if %buildjo%==2 set "jo=n"
+if %buildjo% GTR 2 GOTO jo
+if %deleteINI%==1 echo.jo=^%buildjo%>>%ini%
+
 :dssim
 if %dssimINI%==0 (
     echo -------------------------------------------------------------------------------
@@ -1587,6 +1607,8 @@ rem ------------------------------------------------------------------
 if %build32%==yes call :writeProfile 32
 if %build64%==yes call :writeProfile 64
 
+findstr hkps://keys.openpgp.org "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf" || echo keyserver hkps://keys.openpgp.org >> "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf"
+
 rem loginProfile
 if exist %instdir%\%msys2%\etc\profile.pacnew ^
     move /y %instdir%\%msys2%\etc\profile.pacnew %instdir%\%msys2%\etc\profile
@@ -1623,7 +1645,7 @@ set compileArgs=--cpuCount=%cpuCount% --build32=%build32% --build64=%build64% ^
 --mpv=%mpv% --license=%license2%  --stripping=%stripFile% --packing=%packFile% --rtmpdump=%rtmpdump% ^
 --logging=%logging% --bmx=%bmx% --standalone=%standalone% --aom=%aom% --faac=%faac% --ffmbc=%ffmbc% ^
 --curl=%curl% --cyanrip=%cyanrip% --redshift=%redshift% --rav1e=%rav1e% --ripgrep=%ripgrep% ^
---dav1d=%dav1d% --vvc=%vvc% --jq=%jq% --dssim=%dssim% --avs2=%avs2% --timeStamp=%timeStamp% ^
+--dav1d=%dav1d% --vvc=%vvc% --jq=%jq% --jo=%jo% --dssim=%dssim% --avs2=%avs2% --timeStamp=%timeStamp% ^
 --noMintty=%noMintty% --ccache=%ccache% --svthevc=%svthevc% --svtav1=%svtav1% --svtvp9=%svtvp9% --xvc=%xvc%
     set "msys2=%msys2%"
     set "noMintty=%noMintty%"
