@@ -23,8 +23,14 @@ ncols=72
     rm -f "$LOCALBUILDDIR"/{7za,wget,grep}.exe
 
 do_simple_print() {
-    local plain formatString='' dateValue
-    [[ $1 == -p ]] && plain=y && shift
+    local plain formatString='' dateValue newline='\n'
+    while true; do
+        case "$1" in
+        -n) newline='' && shift ;;
+        -p) plain=y && shift ;;
+        *) break ;;
+        esac
+    done
 
     if [[ $timeStamp == y ]]; then
         formatString+="${purple}"'%(%H:%M:%S)T'"${reset}"' '
@@ -35,7 +41,7 @@ do_simple_print() {
     if [[ -z $plain ]]; then
         formatString+="${bold}├${reset} "
     fi
-    printf "$formatString"'%b'"$reset"'\n' $dateValue "$*"
+    printf "$formatString"'%b'"${reset}${newline}" $dateValue "$*"
 }
 
 do_print_status() {
@@ -826,9 +832,9 @@ do_getFFmpegConfig() {
         do_addOption --enable-schannel
     fi
 
-    enabled_any lib{vo-aacenc,aacplus,utvideo,dcadec,faac,ebur128,ndi_newtek,ndi-newtek} netcdf &&
-        do_removeOption "--enable-(lib(vo-aacenc|aacplus|utvideo|dcadec|faac|ebur128|ndi_newtek|ndi-newtek)|netcdf)" &&
-        sed -ri 's;--enable-(lib(vo-aacenc|aacplus|utvideo|dcadec|faac|ebur128|ndi_newtek|ndi-newtek)|netcdf);;g' \
+    enabled_any lib{vo-aacenc,aacplus,utvideo,dcadec,faac,ebur128,ndi_newtek,ndi-newtek,ssh} netcdf &&
+        do_removeOption "--enable-(lib(vo-aacenc|aacplus|utvideo|dcadec|faac|ebur128|ndi_newtek|ndi-newtek|ssh)|netcdf)" &&
+        sed -ri 's;--enable-(lib(vo-aacenc|aacplus|utvideo|dcadec|faac|ebur128|ndi_newtek|ndi-newtek|ssh)|netcdf);;g' \
             "$LOCALBUILDDIR/ffmpeg_options.txt"
 }
 
@@ -1276,7 +1282,7 @@ do_mesoninstall() {
 
 do_rust() {
     log "rust.update" "$RUSTUP_HOME/bin/cargo.exe" update
-    {
+    [[ $ccache = y ]] && {
         command -v sccache > /dev/null 2>&1 &&
             export RUSTC_WRAPPER=sccache &&
             { sccache --start-server > /dev/null 2>&1 || true; }
@@ -1296,8 +1302,7 @@ do_rust() {
 compilation_fail() {
     [[ -z $build32 || -z $build64 ]] && return 1
     local reason="$1"
-    local operation
-    operation="$(echo "$reason" | tr '[:upper:]' '[:lower:]')"
+    local operation="${reason,,}"
     if [[ $_notrequired ]]; then
         if [[ $logging == y ]]; then
             echo "Likely error (tail of the failed operation logfile):"
@@ -1532,67 +1537,69 @@ do_unhide_all_sharedlibs() {
 }
 
 do_pacman_install() {
-    local pkg msyspackage
-    while [ -n "$*" ]; do
+    local pkg msyspackage=false pkgs
+    while true; do
         case "$1" in
-        -m) msyspackage=y ;;
+        -m) msyspackage=true && shift ;;
         *) break ;;
         esac
     done
     for pkg; do
-        [[ $msyspackage != "y" && $pkg != "${MINGW_PACKAGE_PREFIX}-"* ]] &&
-            pkg="${MINGW_PACKAGE_PREFIX}-${pkg}"
-        pacman -Qqe "^${pkg}$" > /dev/null 2>&1 && continue
-        if [[ $timeStamp == y ]]; then
-            printf "${purple}"'%(%H:%M:%S)T'"${reset}"' %s' -1 "Installing ${pkg#$MINGW_PACKAGE_PREFIX-}... "
+        if ! $msyspackage && [[ $pkg != "${MINGW_PACKAGE_PREFIX}-"* ]]; then
+            pkgs="${pkgs:+$pkgs }${MINGW_PACKAGE_PREFIX}-${pkg}"
         else
-            echo -n "Installing ${pkg#$MINGW_PACKAGE_PREFIX-}... "
+            pkgs="${pkgs:+$pkgs }${pkg}"
         fi
+    done
+
+    for pkg in $pkgs; do
+        pacman -Qqe "$pkg" > /dev/null 2>&1 && continue
+        do_simple_print -n "Installing ${pkg#$MINGW_PACKAGE_PREFIX-}... "
         if pacman -S --overwrite "/usr/*" --overwrite "/mingw64/*" --overwrite "/mingw32/*" --noconfirm --ask=20 --needed "$pkg" > /dev/null 2>&1; then
             pacman -D --asexplicit "$pkg" > /dev/null
-            if [[ $msyspackage == "y" ]]; then
+            if $msyspackage; then
                 /usr/bin/grep -q "^${pkg}$" /etc/pac-msys-extra.pk > /dev/null 2>&1 ||
                     echo "${pkg}" >> /etc/pac-msys-extra.pk
             else
                 /usr/bin/grep -q "^${pkg#$MINGW_PACKAGE_PREFIX-}$" /etc/pac-mingw-extra.pk > /dev/null 2>&1 ||
                     echo "${pkg#$MINGW_PACKAGE_PREFIX-}" >> /etc/pac-mingw-extra.pk
             fi
-            sort -uo /etc/pac-mingw-extra.pk{,} 2> /dev/null >&2
-            sort -uo /etc/pac-msys-extra.pk{,} 2> /dev/null >&2
             echo "done"
         else
             echo "failed"
         fi
     done
+    sort -uo /etc/pac-mingw-extra.pk{,} > /dev/null 2>&1
+    sort -uo /etc/pac-msys-extra.pk{,} > /dev/null 2>&1
     do_hide_all_sharedlibs
 }
 
 do_pacman_remove() {
-    local pkg msyspackage
-    while [ -n "$*" ]; do
+    local pkg msyspackage=false pkgs
+    while true; do
         case "$1" in
-        -m) msyspackage=y ;;
+        -m) msyspackage=true ;;
         *) break ;;
         esac
     done
     for pkg; do
-        [[ $msyspackage != "y" && $pkg != "${MINGW_PACKAGE_PREFIX}-"* ]] &&
-            pkg="${MINGW_PACKAGE_PREFIX}-${pkg}"
-        if [[ $msyspackage == "y" ]]; then
+        if ! $msyspackage && [[ $pkg != "${MINGW_PACKAGE_PREFIX}-"* ]]; then
+            pkgs="${pkgs:+$pkgs }${MINGW_PACKAGE_PREFIX}-${pkg}"
+        else
+            pkgs="${pkgs:+$pkgs }${pkg}"
+        fi
+    done
+
+    for pkg in $pkgs; do
+        if $msyspackage; then
             [[ -f /etc/pac-msys-extra.pk ]] &&
                 sed -i "/^${pkg}$/d" /etc/pac-msys-extra.pk > /dev/null 2>&1
         else
             [[ -f /etc/pac-mingw-extra.pk ]] &&
                 sed -i "/^${pkg#$MINGW_PACKAGE_PREFIX-}$/d" /etc/pac-mingw-extra.pk > /dev/null 2>&1
         fi
-        sort -uo /etc/pac-mingw-extra.pk{,} 2> /dev/null >&2
-        sort -uo /etc/pac-msys-extra.pk{,} 2> /dev/null >&2
-        pacman -Qqe "^${pkg}$" > /dev/null 2>&1 || continue
-        if [[ $timeStamp == y ]]; then
-            printf "${purple}"'%(%H:%M:%S)T'"${reset}"' %s' -1 "Uninstalling ${pkg#$MINGW_PACKAGE_PREFIX-}... "
-        else
-            echo -n "Uninstalling ${pkg#$MINGW_PACKAGE_PREFIX-}... "
-        fi
+        pacman -Qqe "$pkg" > /dev/null 2>&1 || continue
+        do_simple_print -n "Uninstalling ${pkg#$MINGW_PACKAGE_PREFIX-}... "
         do_hide_pacman_sharedlibs "$pkg" revert
         if pacman -Rs --noconfirm --ask=20 "$pkg" > /dev/null 2>&1; then
             echo "done"
@@ -1601,6 +1608,8 @@ do_pacman_remove() {
             echo "failed"
         fi
     done
+    sort -uo /etc/pac-mingw-extra.pk{,} > /dev/null 2>&1
+    sort -uo /etc/pac-msys-extra.pk{,} > /dev/null 2>&1
     do_hide_all_sharedlibs
 }
 
@@ -1955,41 +1964,26 @@ EOF
 }
 
 create_ab_ccache() {
-    local bin
+    local bin temp_file ccache_path=false ccache_win_path=
+    temp_file=$(mktemp)
+    if [[ $ccache = y ]] && command -v ccache; then
+        ccache_path="$(command -v ccache)"
+        ccache_win_path=$(cygpath -m "$ccache_path")
+    fi
     for bin in {$MINGW_CHOST-,}{gcc,g++} clang{,++} cc cpp c++; do
-        if [[ ! -f "$LOCALDESTDIR/bin/$bin.bat" ]] || ! "$LOCALDESTDIR/bin/$bin.bat" --help > /dev/null 2>&1; then
-            printf '%s\r\n' \
-                '@echo off >nul 2>&1' \
-                'rem() { "$@"; }' \
-                'rem test -f nul && rm nul' \
-                'rem ccache > /dev/null 2>&1' \
-                "rem test \$? -ne 127 && ccache $bin \"\$@\"" \
-                'rem exit $?' \
-                "$(cygpath -m "$MINGW_PREFIX/bin/ccache") $bin %*" \
-                'exit %ERRORLEVEL%' \
-                'goto :EOF' \
-                ':args' \
-                'if -%1-==-- (' \
-                '    exit /b' \
-                ')' \
-                'test -f %1' \
-                'if %ERRORLEVEL%==0 (' \
-                '    for /f "tokens=1 delims=" %%a in ("cygpath -m %1") do set "ARGS=%ARGS% %%a"' \
-                '    shift' \
-                ') else (' \
-                '    test -d %1' \
-                '    if %ERRORLEVEL%==0 (' \
-                '        for /f "tokens=1 delims=" %%a in ("cygpath -m %1") do set "ARGS=%ARGS% %%a"' \
-                '        shift' \
-                '    ) else (' \
-                '        set "ARGS=%ARGS% %1"' \
-                '        shift' \
-                '    )' \
-                ')' \
-                'goto :args' > "$LOCALDESTDIR/bin/$bin.bat"
-        fi
+        command -v "$bin" || continue
+        cat << EOF > "$temp_file"
+@echo off >nul 2>&1
+rem() { "\$@"; }
+rem test -f nul && rm nul
+rem $ccache_path --help > /dev/null 2>&1 && $ccache_path $(command -v $bin) "\$@" || $(command -v $bin) "\$@"
+rem exit \$?
+$ccache_win_path $(cygpath -m "$(command -v $bin)") %*
+EOF
+        diff -q "$temp_file" "$LOCALDESTDIR/bin/$bin.bat" > /dev/null 2>&1 || cp -f "$temp_file" "$LOCALDESTDIR/bin/$bin.bat"
         chmod +x "$LOCALDESTDIR/bin/$bin.bat"
     done
+    rm "$temp_file"
 }
 
 create_cmake_toolchain() {
@@ -2004,8 +1998,6 @@ create_cmake_toolchain() {
         "SET(CMAKE_PREFIX_PATH $_win_path_LOCALDESTDIR $_win_path_MINGW_PREFIX $_win_path_MINGW_PREFIX/$MINGW_CHOST)"
         "SET(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)"
         "SET(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)"
-        "SET(CMAKE_C_COMPILER $_win_path_LOCALDESTDIR/bin/gcc.bat)"
-        "SET(CMAKE_CXX_COMPILER $_win_path_LOCALDESTDIR/bin/g++.bat)"
     )
 
     [[ -f "$LOCALDESTDIR"/etc/toolchain.cmake ]] &&

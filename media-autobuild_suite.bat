@@ -25,6 +25,7 @@ color 70
 title media-autobuild_suite
 
 setlocal
+chcp 65001 >nul 2>&1
 cd /d "%~dp0"
 set "TERM=xterm-256color"
 setlocal
@@ -67,6 +68,26 @@ do if %%f lss 4 (
     exit
 )
 
+(
+    where lib.exe || ^
+    where cl.exe || ^
+    if DEFINED VSINSTALLDIR cd .
+) >nul 2>&1 && goto MSVCINSTALLED
+goto MSVCNOTINSTALLED
+:MSVCINSTALLED
+echo ----------------------------------------------------------------------
+echo. You are running in a MSVC environment ^(cl.exe or lib.exe detected^)
+echo. This is not supported.
+echo. Please run the script through a normal cmd.exe some other way.
+echo.
+echo. Detected Paths:
+where lib.exe 2>nul
+where cl.exe 2>nul
+echo %VSINSTALLDIR%
+pause
+exit
+:MSVCNOTINSTALLED
+
 set build=%instdir%\build
 if not exist %build% mkdir %build%
 
@@ -94,8 +115,8 @@ libaom libopenmpt version3
 :: options also available with the suite
 set ffmpeg_options_full=chromaprint decklink frei0r libbs2b libcaca ^
 libcdio libfdk-aac libflite libfribidi libgme libgsm libilbc libsvthevc libsvtav1 ^
-libkvazaar libmodplug librtmp librubberband libssh libtesseract libxavs libzmq ^
-libzvbi openal libvmaf libcodec2 libsrt ladspa #vapoursynth #liblensfun #librav1e
+libkvazaar libmodplug librtmp librubberband #libssh libtesseract libxavs libzmq ^
+libzvbi openal libvmaf libcodec2 libsrt ladspa librav1e #vapoursynth #liblensfun
 
 :: options also available with the suite that add shared dependencies
 set ffmpeg_options_full_shared=opencl opengl cuda-nvcc libnpp libopenh264
@@ -381,9 +402,6 @@ if %x2652INI%==0 (
     echo.
     echo. Binaries being built depends on "standalone=y"
     echo.
-    echo. Note: To include SVT-HEVC in x265, you need to enable it, not just add its
-    echo. flag to ffmpeg_options.txt
-    echo.
     echo -------------------------------------------------------------------------------
     echo -------------------------------------------------------------------------------
     set /P buildx265="Build x265: "
@@ -429,7 +447,6 @@ if %svthevcINI%==0 (
     echo. 1 = Yes
     echo. 2 = No
     echo.
-    echo. Needs to be enabled for it to be included in x265.
     echo -------------------------------------------------------------------------------
     echo -------------------------------------------------------------------------------
     set /P buildsvthevc="Build SVT-HEVC: "
@@ -1334,22 +1351,9 @@ if not exist "%instdir%\%msys2%\msys2_shell.cmd" (
         echo.- Downloading and unpacking msys2 basic system
         echo.
         echo -------------------------------------------------------------------------------
-        7z >nul 2>&1 && (
-            7z x msys2-base.tar.xz -so | 7z x -aoa -si -ttar -o..
-        ) || 7za >nul 2>&1 && (
-            7za x msys2-base.tar.xz -so | 7za x -aoa -si -ttar -o..
-        ) || echo $wc = New-Object System.Net.WebClient; ^
-            $wc.DownloadFile^(^(Invoke-RestMethod "https://www.powershellgallery.com/api/v2/Packages?`$filter=Id eq 'pscx' and IsLatestVersion"^).content.src, "$PWD\pscx.zip"^); ^
-            Add-Type -assembly "System.IO.Compression.FileSystem"; ^
-            [System.IO.Compression.ZipFile]::ExtractToDirectory^("$PWD\pscx.zip", "$PWD\pscx"^); ^
-            Remove-Item -Recurse $PWD\pscx.zip, $PWD\pscx\_rels, $PWD\pscx\package; ^
-            powershell -noprofile -command { ^
-                Import-Module $PWD\pscx\Pscx.psd1 -Force -Cmdlet Expand-Archive -Prefix 7za; ^
-                Expand-7zaArchive -Force -ShowProgress $PWD\msys2-base.tar.xz; ^
-                Remove-Item $PWD\msys2-base.tar.xz; ^
-                Expand-7zaArchive -Force -ShowProgress -OutputPath .. $PWD\msys2-base.tar; ^
-                Remove-Item $PWD\msys2-base.tar; ^
-            }; Remove-Item -Recurse $PWD\pscx | powershell -NoProfile -NonInteractive -Command -
+        7z >nul 2>&1 || 7za >nul 2>&1 || powershell -NoProfile -NonInteractive -Command ^(New-Object System.Net.WebClient^).DownloadFile^('https://github.com/chocolatey/chocolatey.org/raw/master/chocolatey/Website/7za.exe', '7za.exe'^)
+        7z >nul 2>&1 && 7z x msys2-base.tar.xz -so | 7z x -aoa -si -ttar -o.. || 7za x msys2-base.tar.xz -so | 7za x -aoa -si -ttar -o..
+        if exist 7za.exe del 7za.exe
     )
 
     if not exist %instdir%\%msys2%\usr\bin\msys-2.0.dll (
@@ -1359,8 +1363,8 @@ if not exist "%instdir%\%msys2%\msys2_shell.cmd" (
         echo.- Download msys2 basic system failed,
         echo.- please download it manually from:
         echo.- http://repo.msys2.org/distrib/
-        echo.- and copy the uncompressed folder to:
-        echo.- %build%
+        echo.- extract and put the msys2 folder into
+        echo.- the root media-autobuid_suite folder
         echo.- and start the batch script again!
         echo.
         echo -------------------------------------------------------------------------------
@@ -1432,7 +1436,7 @@ if exist %fstab%. (
     for /f "tokens=1 delims= " %%a in ('findstr trunk %fstab%') do if not [%%a]==[%instdir%\] set "removefstab=yes"
     findstr local32 %fstab% >nul 2>&1 && ( if [%build32%]==[no] set "removefstab=yes" ) || if [%build32%]==[yes] set "removefstab=yes"
     findstr local64 %fstab% >nul 2>&1 && ( if [%build64%]==[no] set "removefstab=yes" ) || if [%build64%]==[yes] set "removefstab=yes"
-)
+) else set removefstab=yes
 
 if not [%removefstab%]==[no] (
     rem writeFstab
@@ -1599,6 +1603,7 @@ if %msys2%==msys32 (
     echo.-------------------------------------------------------------------------------
     call %instdir%\%msys2%\autorebase.bat
 )
+del "%build%\msys2-base.tar.xz" 2>nul
 
 rem ------------------------------------------------------------------
 rem write config profiles:
@@ -1607,7 +1612,7 @@ rem ------------------------------------------------------------------
 if %build32%==yes call :writeProfile 32
 if %build64%==yes call :writeProfile 64
 
-findstr hkps://keys.openpgp.org "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf" || echo keyserver hkps://keys.openpgp.org >> "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf"
+findstr hkps://keys.openpgp.org "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf" >nul 2>&1 || echo keyserver hkps://keys.openpgp.org >> "%instdir%\%msys2%\home\%USERNAME%\.gnupg\gpg.conf"
 
 rem loginProfile
 if exist %instdir%\%msys2%\etc\profile.pacnew ^
