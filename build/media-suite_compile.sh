@@ -1503,10 +1503,12 @@ if [[ ! $x265 = "n" ]] && do_vcs "hg::https://bitbucket.org/multicoreware/x265";
     [[ $bits = "32bit" ]] && assembly="-DENABLE_ASSEMBLY=OFF"
     [[ $x265 = d ]] && xpsupport="-DWINXP_SUPPORT=ON"
 
+    # Fix hg.bat using python2 still
+    grep_and_sed python2 /usr/bin/hg.bat 's/python2/python3/'
+
     build_x265() {
         create_build_dir
-        local build_root
-        build_root="$(pwd)"
+        local build_root="$PWD"
         mkdir -p {8,10,12}bit
 
     do_x265_cmake() {
@@ -1819,10 +1821,6 @@ if [[ $ffmpeg != "no" ]]; then
 
         # See issue https://github.com/OpenVisualCloud/SVT-AV1/issues/567 for the reasons behind the follow codeblock:
         # start of SVT-AV1 temporary measures
-        if enabled libsvtav1 && enabled libsvthevc; then
-            do_print_progress "Until SVT-AV1 issues a fix, libsvtav1 must be disabled while libsvthevc is enabled."
-            do_removeOption --enable-libsvtav1
-        fi
         if enabled libsvtav1; then
             if enabled libaom && enabled libopencore-amrwb; then
                 do_print_progress "Until SVT-AV1 issues a fix, libaom & libopencore-amrwb must be disabled while libsvtav1 is enabled."

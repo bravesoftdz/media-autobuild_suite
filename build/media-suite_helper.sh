@@ -1282,11 +1282,12 @@ do_mesoninstall() {
 
 do_rust() {
     log "rust.update" "$RUSTUP_HOME/bin/cargo.exe" update
-    [[ $ccache = y ]] && {
-        command -v sccache > /dev/null 2>&1 &&
-            export RUSTC_WRAPPER=sccache &&
-            { sccache --start-server > /dev/null 2>&1 || true; }
-    } || unset RUSTC_WRAPPER
+    if [[ $ccache == y ]]; then
+        type sccache > /dev/null 2>&1 &&
+            export RUSTC_WRAPPER=sccache
+    else
+        unset RUSTC_WRAPPER
+    fi
     # use this array to pass additional parameters to cargo
     local rust_extras=()
     extra_script pre rust
@@ -1966,12 +1967,12 @@ EOF
 create_ab_ccache() {
     local bin temp_file ccache_path=false ccache_win_path=
     temp_file=$(mktemp)
-    if [[ $ccache = y ]] && command -v ccache; then
+    if [[ $ccache == y ]] && type ccache > /dev/null 2>&1; then
         ccache_path="$(command -v ccache)"
         ccache_win_path=$(cygpath -m "$ccache_path")
     fi
     for bin in {$MINGW_CHOST-,}{gcc,g++} clang{,++} cc cpp c++; do
-        command -v "$bin" || continue
+        type "$bin" > /dev/null 2>&1 || continue
         cat << EOF > "$temp_file"
 @echo off >nul 2>&1
 rem() { "\$@"; }
